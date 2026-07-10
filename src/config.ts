@@ -28,6 +28,13 @@ const envSchema = z.object({
   // Comma-separated for multiple environments (e.g. local + prod).
   WEB_ORIGIN: z.string().default('http://localhost:3000'),
 
+  // Shared secret for Vercel Cron Jobs. Vercel sends it as `Authorization:
+  // Bearer <CRON_SECRET>` when invoking scheduled routes (see
+  // https://vercel.com/docs/cron-jobs/manage-cron-jobs#securing-cron-jobs).
+  CRON_SECRET: z
+    .string()
+    .min(16, 'CRON_SECRET обязателен и должен быть длиной от 16 символов'),
+
   PORT: z.coerce.number().int().positive().default(3001),
 });
 
@@ -47,5 +54,6 @@ export const config = {
   jwtSecret: parsed.data.JWT_SECRET,
   jwtExpiresInSeconds: parsed.data.JWT_EXPIRES_IN_SECONDS,
   webOrigins: parsed.data.WEB_ORIGIN.split(',').map((o) => o.trim()),
+  cronSecret: parsed.data.CRON_SECRET,
   port: parsed.data.PORT,
 } as const;

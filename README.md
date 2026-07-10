@@ -59,6 +59,49 @@ every route requires `Authorization: Bearer <token>`.
 | PATCH  | `/api/tasks/:id`    | Edit task text (author only)                          |
 | PATCH  | `/api/tasks/:id/done`| Mark a task done (owner only)                        |
 | DELETE | `/api/tasks/:id`    | Delete a task (author only)                           |
+| GET    | `/api/reminders/run`| Broadcast reminders to all users (Vercel Cron only)   |
+
+---
+
+## Scheduled Reminders
+
+`GET /api/reminders/run` sends every whitelisted user their outstanding tasks (or
+"Все задачи выполнены 👍") directly via the Telegram Bot API — no running bot
+process is required, since this route talks to `api.telegram.org` over plain HTTP.
+
+This is the **always-on** half of the reminder system: `TODO_bot`'s own scheduler
+(`src/scheduler/`) only runs while that process is up, whereas this route runs on
+Vercel independent of it.
+
+**Schedule.** [`vercel.json`](./vercel.json) defines three [Vercel Cron
+Jobs](https://vercel.com/docs/cron-jobs), one per reminder time. Vercel Cron
+schedules are always in UTC, so the times below are `Asia/Tashkent` (UTC+5)
+converted to UTC:
+
+| Tashkent time | Cron (UTC)     |
+|---------------|----------------|
+| 08:00         | `0 3 * * *`    |
+| 12:00         | `0 7 * * *`    |
+| 16:00         | `0 11 * * *`   |
+
+On the Hobby plan, Vercel does not guarantee the exact minute — delivery can land
+anywhere within the scheduled hour (e.g. the 08:00 run may fire any time between
+03:00–03:59 UTC). See [Cron Jobs usage & pricing](https://vercel.com/docs/cron-jobs/usage-and-pricing).
+
+**Security.** The route is public (`@Public()`, bypassing the JWT guard used by
+the rest of the API) but protected by `CronSecretGuard`, which checks
+`Authorization: Bearer <CRON_SECRET>`. Set `CRON_SECRET` as a Vercel project
+environment variable — Vercel automatically sends it as that header on every Cron
+invocation (see [Securing Cron Jobs](https://vercel.com/docs/cron-jobs/manage-cron-jobs#securing-cron-jobs)).
+Requests without a matching header get `401 Unauthorized`.
+
+**Testing locally:**
+```bash
+curl -H "Authorization: Bearer $CRON_SECRET" http://localhost:3001/api/reminders/run
+```
+
+**Future work:** per-user configurable reminder times (currently the three slots
+above are shared by everyone).
 
 ---
 
@@ -89,6 +132,7 @@ every route requires `Authorization: Bearer <token>`.
 | `JWT_SECRET`               | Yes      | Random secret (32+ chars) signing session JWTs. Rotate to invalidate all sessions |
 | `JWT_EXPIRES_IN_SECONDS`   | No       | Session lifetime in seconds (default: `604800`, 7 days)      |
 | `WEB_ORIGIN`               | No       | Comma-separated CORS origin allowlist (default `http://localhost:3000`) |
+| `CRON_SECRET`              | Yes      | Random secret (16+ chars) authorizing Vercel Cron calls to `/api/reminders/run` |
 | `PORT`                     | No       | HTTP port (default `3001`)                                   |
 
 ---
@@ -135,6 +179,7 @@ src/
     guards/jwt-auth.guard.ts   # global auth guard (@Public() opts out)
   users/                  # whitelist read access
   tasks/                  # task CRUD, mirrors TODO_bot/src/services/tasks.ts
+  reminders/              # GET /reminders/run — Vercel Cron broadcast (see above)
   db/
     schema.ts             # Drizzle schema (users, tasks) — shared with TODO_bot
     client.ts              # Neon connection
