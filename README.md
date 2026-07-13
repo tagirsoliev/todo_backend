@@ -33,10 +33,11 @@ enforced at the SQL level.
 
 - **Schema** (`src/db/schema.ts`) and migrations (`drizzle/`) are copied from `TODO_bot`
   and must stay in sync with it — both projects point at the same Neon database.
-- **Auth**: the site logs a user in via the
-  [Telegram Login Widget](https://core.telegram.org/widgets/login). The backend verifies
-  the widget's signature with the bot's own token, checks the user is on the whitelist,
-  and issues a JWT for subsequent API calls.
+- **Auth**: the site logs a user in via
+  [Telegram Login (OIDC)](https://core.telegram.org/bots/telegram-login). The frontend's Login
+  widget returns an `id_token`; the backend verifies its RS256 signature against Telegram's
+  JWKS (public keys only — no client secret), checks the user is on the whitelist, and
+  issues a session JWT for subsequent API calls.
 - **Business rules** (who may mark a task done / edit / delete) mirror
   `TODO_bot/src/services/tasks.ts` exactly, so the bot and the site behave the same way
   for the same task.
@@ -48,10 +49,10 @@ enforced at the SQL level.
 All routes are prefixed with `/api`. Except `GET /api` and `POST /api/auth/telegram`,
 every route requires `Authorization: Bearer <token>`.
 
-| Method | Route               | Description                                         |
-|--------|---------------------|------------------------------------------------------|
-| GET    | `/api`              | Health check (public)                                |
-| POST   | `/api/auth/telegram`| Verify a Telegram Login Widget payload, return a JWT |
+| Method | Route                        | Description                                         |
+|--------|------------------------------|------------------------------------------------------|
+| GET    | `/api`                       | Health check (public)                                |
+| POST   | `/api/auth/telegram`         | Verify a Telegram OIDC `id_token`, return a JWT      |
 | GET    | `/api/users/me`     | The current authenticated user                       |
 | GET    | `/api/users`        | The whole whitelist (e.g. for a task-recipient picker)|
 | GET    | `/api/tasks`        | Current user's outstanding tasks (as recipient)       |
@@ -107,9 +108,9 @@ above are shared by everyone).
 
 ## Security
 
-- **Auth**: Telegram Login Widget HMAC-SHA256 signature check (timing-safe comparison,
-  24h payload freshness window) → JWT session, re-validated against the whitelist on
-  every request.
+- **Auth**: Telegram OIDC; the login widget's `id_token` has its RS256 signature verified
+  against Telegram's JWKS, with issuer/audience/expiry checks → JWT session, re-validated
+  against the whitelist on every request.
 - **Input validation**: global `ValidationPipe` with `whitelist` + `forbidNonWhitelisted`
   — unexpected/extra fields in a request body are rejected outright (no mass assignment).
 - **Transport**: `helmet()` security headers, CORS restricted to an explicit origin
@@ -128,7 +129,8 @@ above are shared by everyone).
 | Variable                 | Required | Description                                                |
 |---------------------------|:--------:|--------------------------------------------------------------|
 | `DATABASE_URL`             | Yes      | Neon connection string (shared with `TODO_bot`)              |
-| `BOT_TOKEN`                | Yes      | Same bot token as `TODO_bot` — verifies Telegram login signatures |
+| `BOT_TOKEN`                | Yes      | Same bot token as `TODO_bot` — sends reminder messages via the Bot API |
+| `TELEGRAM_CLIENT_ID`       | Yes      | Telegram Login (OIDC) Client ID from `@BotFather` (Bot Settings > Web Login); checked against the `id_token`'s `aud` |
 | `JWT_SECRET`               | Yes      | Random secret (32+ chars) signing session JWTs. Rotate to invalidate all sessions |
 | `JWT_EXPIRES_IN_SECONDS`   | No       | Session lifetime in seconds (default: `604800`, 7 days)      |
 | `WEB_ORIGIN`               | No       | Comma-separated CORS origin allowlist (default `http://localhost:3000`) |
@@ -173,8 +175,8 @@ src/
   app.module.ts           # wires all feature modules + global guards
   auth/
     auth.controller.ts    # POST /auth/telegram
-    auth.service.ts       # verifies signature, issues JWT
-    telegram-auth.util.ts # Telegram Login Widget HMAC verification
+    auth.service.ts       # verifies id_token, issues JWT
+    telegram-auth.util.ts # Telegram OIDC: id_token/JWKS verification
     strategies/jwt.strategy.ts
     guards/jwt-auth.guard.ts   # global auth guard (@Public() opts out)
   users/                  # whitelist read access

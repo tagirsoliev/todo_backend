@@ -8,9 +8,20 @@ const envSchema = z.object({
     .string()
     .min(1, 'DATABASE_URL обязателен (connection string от Neon)'),
 
-  // Same bot token as TODO_bot's BOT_TOKEN — required to verify the HMAC hash
-  // of the Telegram Login Widget payload (Telegram's documented login flow).
+  // Same bot token as TODO_bot's BOT_TOKEN — used to send reminder messages
+  // via the Telegram Bot API (see reminders.service). No longer used for login
+  // (that moved to Telegram's OIDC flow, see TELEGRAM_CLIENT_* below).
   BOT_TOKEN: z.string().min(1, 'BOT_TOKEN обязателен (тот же, что у бота)'),
+
+  // Telegram Login (OIDC) client id, issued by @BotFather under Bot Settings >
+  // Web Login. The frontend's Login widget returns an id_token signed by
+  // Telegram; the backend verifies its RS256 signature via JWKS and checks that
+  // `aud` matches this client id. No client secret is needed — verification uses
+  // Telegram's public keys only (the secret is for the code-exchange flow, which
+  // we don't use).
+  TELEGRAM_CLIENT_ID: z
+    .string()
+    .min(1, 'TELEGRAM_CLIENT_ID обязателен (Client ID из @BotFather)'),
 
   // Signs/verifies session JWTs issued after a successful Telegram login.
   // Must be a long random secret, distinct from BOT_TOKEN.
@@ -51,6 +62,7 @@ if (!parsed.success) {
 export const config = {
   databaseUrl: parsed.data.DATABASE_URL,
   botToken: parsed.data.BOT_TOKEN,
+  telegramClientId: parsed.data.TELEGRAM_CLIENT_ID,
   jwtSecret: parsed.data.JWT_SECRET,
   jwtExpiresInSeconds: parsed.data.JWT_EXPIRES_IN_SECONDS,
   webOrigins: parsed.data.WEB_ORIGIN.split(',').map((o) => o.trim()),
