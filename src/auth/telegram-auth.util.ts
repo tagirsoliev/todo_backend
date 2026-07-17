@@ -5,7 +5,8 @@ const TELEGRAM_ISSUER = 'https://oauth.telegram.org';
 const JWKS_URI = `${TELEGRAM_ISSUER}/.well-known/jwks.json`;
 
 // Claims we rely on from the id_token (scope: openid profile). `id` is the
-// Telegram user id used as our whitelist key; `sub` is a separate opaque id.
+// Telegram user id used as our whitelist key; `sub` is a separate opaque id
+// that must stay a string — it exceeds Number.MAX_SAFE_INTEGER.
 export interface TelegramIdTokenClaims {
   iss: string;
   // Telegram's client_id is numeric, so `aud` may arrive as a JSON number.
@@ -13,11 +14,17 @@ export interface TelegramIdTokenClaims {
   sub: string;
   exp: number;
   iat: number;
+  // Normalized to a number here; Telegram sends it as a string.
   id: number;
   name?: string;
   preferred_username?: string;
   picture?: string;
 }
+
+// The payload exactly as Telegram encodes it, before normalization.
+type RawIdTokenClaims = Omit<TelegramIdTokenClaims, 'id'> & {
+  id?: string | number;
+};
 
 // Matches node:crypto's JsonWebKey (which carries a string index signature),
 // with `kid` required so we can select the right key from the JWKS.
@@ -84,7 +91,7 @@ export async function verifyIdToken(
 
   const claims = JSON.parse(
     Buffer.from(payloadB64, 'base64url').toString('utf8'),
-  ) as TelegramIdTokenClaims;
+  ) as RawIdTokenClaims;
 
   if (claims.iss !== TELEGRAM_ISSUER) {
     throw new Error('Invalid id_token issuer');
@@ -104,13 +111,16 @@ export async function verifyIdToken(
   if (typeof claims.exp !== 'number' || claims.exp < nowSeconds) {
     throw new Error('id_token has expired');
   }
-  if (typeof claims.id !== 'number') {
+  // Telegram encodes `id` as a string; our whitelist key is a numeric bigint
+  // column. Telegram user ids stay well inside Number.MAX_SAFE_INTEGER, unlike
+  // `sub`, which is why `sub` must never be used here.
+  const id = Number(claims.id);
+  if (!Number.isSafeInteger(id) || id <= 0) {
     throw new Error(
       `id_token has no usable Telegram user id: id=${JSON.stringify(claims.id)} ` +
-        `(${typeof claims.id}), sub=${JSON.stringify(claims.sub)} ` +
-        `(${typeof claims.sub}), claims present: ${Object.keys(claims).join(', ')}`,
+        `(${typeof claims.id}), claims present: ${Object.keys(claims).join(', ')}`,
     );
   }
 
-  return claims;
+  return { ...claims, id };
 }
