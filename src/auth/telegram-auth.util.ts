@@ -8,7 +8,8 @@ const JWKS_URI = `${TELEGRAM_ISSUER}/.well-known/jwks.json`;
 // Telegram user id used as our whitelist key; `sub` is a separate opaque id.
 export interface TelegramIdTokenClaims {
   iss: string;
-  aud: string | string[];
+  // Telegram's client_id is numeric, so `aud` may arrive as a JSON number.
+  aud: string | number | Array<string | number>;
   sub: string;
   exp: number;
   iat: number;
@@ -88,11 +89,16 @@ export async function verifyIdToken(
   if (claims.iss !== TELEGRAM_ISSUER) {
     throw new Error('Invalid id_token issuer');
   }
+  // Compare as strings: expectedAudience always comes from process.env, while
+  // the claim may be a number — a strict === would then never match.
+  const expected = String(expectedAudience);
   const audienceOk = Array.isArray(claims.aud)
-    ? claims.aud.includes(expectedAudience)
-    : claims.aud === expectedAudience;
+    ? claims.aud.some((a) => String(a) === expected)
+    : String(claims.aud) === expected;
   if (!audienceOk) {
-    throw new Error('Invalid id_token audience');
+    throw new Error(
+      `Invalid id_token audience: got ${JSON.stringify(claims.aud)}, expected ${expected}`,
+    );
   }
   const nowSeconds = Math.floor(Date.now() / 1000);
   if (typeof claims.exp !== 'number' || claims.exp < nowSeconds) {

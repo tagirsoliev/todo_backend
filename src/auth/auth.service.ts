@@ -1,4 +1,4 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { Injectable, Logger, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { config } from '../config';
 import { UsersService } from '../users/users.service';
@@ -8,6 +8,8 @@ import type { JwtPayload } from './types';
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
   constructor(
     private readonly usersService: UsersService,
     private readonly jwtService: JwtService,
@@ -18,9 +20,12 @@ export class AuthService {
     try {
       const claims = await verifyIdToken(dto.idToken, config.telegramClientId);
       telegramId = claims.id;
-    } catch {
-      // Any failure in verification is an auth failure — do not leak the
-      // underlying reason (bad signature, wrong audience, expired, etc.).
+    } catch (err) {
+      // The client must not learn why (bad signature, wrong audience, expired),
+      // but we do — swallowing the reason entirely makes 401s undebuggable.
+      this.logger.warn(
+        `Telegram id_token verification failed: ${err instanceof Error ? err.message : String(err)}`,
+      );
       throw new UnauthorizedException(
         'Не удалось подтвердить вход через Telegram',
       );
