@@ -105,7 +105,11 @@ export async function verifyIdToken(
     throw new Error('id_token has expired');
   }
   if (typeof claims.id !== 'number') {
-    throw new Error('id_token is missing the Telegram user id');
+    throw new Error(
+      `id_token has no usable Telegram user id: id=${JSON.stringify(claims.id)} ` +
+        `(${typeof claims.id}), sub=${JSON.stringify(claims.sub)} ` +
+        `(${typeof claims.sub}), claims present: ${Object.keys(claims).join(', ')}`,
+    );
   }
 
   return claims;
