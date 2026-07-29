@@ -16,9 +16,10 @@ export const users = pgTable('users', {
   telegramId: bigint('telegram_id', { mode: 'number' }).notNull().unique(),
   name: text('name').notNull(),
   isAdmin: boolean('is_admin').notNull().default(false),
-  // Hour (0–23, in config.timezone) at which the reminders cron sends this
-  // user their daily reminder. Set via TODO_bot's /remindtime.
-  reminderHour: integer('reminder_hour').notNull().default(9),
+  // Hours (0–23 each, in config.timezone) at which the reminders cron sends
+  // this user a reminder — one message per matching hour. Set via TODO_bot's
+  // /remindtime.
+  reminderHours: integer('reminder_hours').array().notNull().default([9]),
   createdAt: timestamp('created_at', { withTimezone: true })
     .notNull()
     .defaultNow(),

@@ -86,8 +86,8 @@ export class RemindersService {
   // the rest.
   async sendToAll(): Promise<BroadcastResult> {
     const hour = currentHour();
-    const users = (await this.usersService.listAll()).filter(
-      (user) => user.reminderHour === hour,
+    const users = (await this.usersService.listAll()).filter((user) =>
+      user.reminderHours.includes(hour),
     );
 
     const results = await Promise.allSettled(

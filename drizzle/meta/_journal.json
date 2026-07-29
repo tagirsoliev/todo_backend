@@ -15,6 +15,20 @@
       "when": 1785297895016,
       "tag": "0001_green_lila_cheney",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1785300087216,
+      "tag": "0002_complete_fantastic_four",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1785300109086,
+      "tag": "0003_misty_fallen_one",
+      "breakpoints": true
     }
   ]
 }

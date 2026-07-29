@@ -85,28 +85,47 @@ export class TasksService {
   // failure (e.g. the author blocked the bot) is logged, not thrown — it
   // must not fail the "mark done" request itself.
   private async notifyAuthorOfCompletion(task: Task): Promise<void> {
+    const owner = await this.usersService.getByTelegramId(task.ownerId);
+    await this.sendTelegramMessage(
+      task.authorId,
+      `✅ <b>${esc(owner?.name ?? 'Кто-то')}</b> выполнил(а) задачу:\n\n📌 ${esc(task.text)}`,
+      `автора ${task.authorId} о выполнении задачи ${task.id}`,
+    );
+  }
+
+  // Notify the owner when the author edits a task assigned to someone else.
+  private async notifyOwnerOfEdit(task: Task): Promise<void> {
+    const author = await this.usersService.getByTelegramId(task.authorId);
+    await this.sendTelegramMessage(
+      task.ownerId,
+      `✏️ <b>${esc(author?.name ?? 'Кто-то')}</b> изменил(а) задачу:\n\n📌 ${esc(task.text)}`,
+      `владельца ${task.ownerId} об изменении задачи ${task.id}`,
+    );
+  }
+
+  // Raw Telegram Bot API call (no library used elsewhere in this repo — see
+  // reminders.service.ts). A delivery failure (e.g. the recipient blocked
+  // the bot) is logged, not thrown — it must not fail the request that
+  // triggered the notification.
+  private async sendTelegramMessage(
+    chatId: number,
+    text: string,
+    logContext: string,
+  ): Promise<void> {
     try {
-      const owner = await this.usersService.getByTelegramId(task.ownerId);
-      const ownerName = owner?.name ?? 'Кто-то';
       const res = await fetch(
         `https://api.telegram.org/bot${config.botToken}/sendMessage`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            chat_id: task.authorId,
-            text: `✅ <b>${esc(ownerName)}</b> выполнил(а) задачу:\n\n📌 ${esc(task.text)}`,
-            parse_mode: 'HTML',
-          }),
+          body: JSON.stringify({ chat_id: chatId, text, parse_mode: 'HTML' }),
         },
       );
       if (!res.ok) {
         throw new Error(`Telegram API ${res.status}: ${await res.text()}`);
       }
     } catch (err) {
-      this.logger.error(
-        `Не удалось уведомить автора ${task.authorId} о выполнении задачи ${task.id}: ${err}`,
-      );
+      this.logger.error(`Не удалось уведомить ${logContext}: ${err}`);
     }
   }
 
@@ -143,6 +162,11 @@ export class TasksService {
       .set({ text })
       .where(and(eq(tasks.id, id), eq(tasks.authorId, authorTelegramId)))
       .returning();
+
+    if (updated && updated.ownerId !== updated.authorId) {
+      await this.notifyOwnerOfEdit(updated);
+    }
+
     return updated;
   }
 
