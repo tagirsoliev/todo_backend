@@ -47,6 +47,11 @@ const envSchema = z.object({
     .min(16, 'CRON_SECRET обязателен и должен быть длиной от 16 символов'),
 
   PORT: z.coerce.number().int().positive().default(3001),
+
+  // Shared time zone for computing "current hour" against users.reminderHour
+  // (reminders cron) and daily/weekly cutoffs (recurring-reset cron). Same
+  // default as TODO_bot previously used for its (now removed) quiet hours.
+  TIMEZONE: z.string().default('Asia/Tashkent'),
 });
 
 const parsed = envSchema.safeParse(process.env);
@@ -68,4 +73,5 @@ export const config = {
   webOrigins: parsed.data.WEB_ORIGIN.split(',').map((o) => o.trim()),
   cronSecret: parsed.data.CRON_SECRET,
   port: parsed.data.PORT,
+  timezone: parsed.data.TIMEZONE,
 } as const;

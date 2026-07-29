@@ -16,6 +16,7 @@ import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import type { AuthenticatedUser } from '../auth/types';
 import { UsersService } from '../users/users.service';
 import { CreateTaskDto } from './dto/create-task.dto';
+import { UpdateRecurrenceDto } from './dto/update-recurrence.dto';
 import { UpdateTaskDto } from './dto/update-task.dto';
 import { TasksService } from './tasks.service';
 
@@ -59,6 +60,23 @@ export class TasksController {
     @Param('id', ParseIntPipe) id: number,
   ) {
     const updated = await this.tasksService.markDone(id, user.telegramId);
+    if (!updated) throw new NotFoundException('Задача не найдена');
+    return updated;
+  }
+
+  // Toggle a task's recurrence (none/daily/weekly). Owner or author — kept
+  // for parity with TODO_bot; not currently surfaced in the web frontend.
+  @Patch(':id/recurrence')
+  async setRecurrence(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: UpdateRecurrenceDto,
+  ) {
+    const updated = await this.tasksService.setRecurrence(
+      id,
+      user.telegramId,
+      dto.recurrence,
+    );
     if (!updated) throw new NotFoundException('Задача не найдена');
     return updated;
   }

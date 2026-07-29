@@ -1,6 +1,7 @@
 import {
   bigint,
   boolean,
+  integer,
   pgTable,
   serial,
   text,
@@ -15,10 +16,16 @@ export const users = pgTable('users', {
   telegramId: bigint('telegram_id', { mode: 'number' }).notNull().unique(),
   name: text('name').notNull(),
   isAdmin: boolean('is_admin').notNull().default(false),
+  // Hour (0–23, in config.timezone) at which the reminders cron sends this
+  // user their daily reminder. Set via TODO_bot's /remindtime.
+  reminderHour: integer('reminder_hour').notNull().default(9),
   createdAt: timestamp('created_at', { withTimezone: true })
     .notNull()
     .defaultNow(),
 });
+
+export const recurrenceValues = ['none', 'daily', 'weekly'] as const;
+export type Recurrence = (typeof recurrenceValues)[number];
 
 // Tasks. Two roles per task:
 //   - owner (ownerId)   — recipient: sees the task in their list, taps "Done".
@@ -31,6 +38,13 @@ export const tasks = pgTable('tasks', {
   ownerId: bigint('owner_id', { mode: 'number' }).notNull(),
   authorId: bigint('author_id', { mode: 'number' }).notNull(),
   isDone: boolean('is_done').notNull().default(false),
+  // 'none' = regular one-off task. 'daily'/'weekly' = recurring task, kept
+  // out of the reminders broadcast and reset unconditionally on schedule by
+  // the recurring-reset cron, regardless of its current isDone.
+  recurrence: text('recurrence', { enum: recurrenceValues })
+    .notNull()
+    .default('none'),
+  lastResetAt: timestamp('last_reset_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true })
     .notNull()
     .defaultNow(),

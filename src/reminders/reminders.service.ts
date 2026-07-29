@@ -16,9 +16,7 @@ function formatReminder(tasks: { text: string }[]): string {
   if (tasks.length === 0) {
     return 'Все задачи выполнены 👍';
   }
-  const lines = tasks
-    .map((t, i) => `${i + 1}. ${esc(t.text)}`)
-    .join('\n');
+  const lines = tasks.map((t, i) => `${i + 1}. ${esc(t.text)}`).join('\n');
   return `📋 Твои невыполненные задачи (${tasks.length}):\n\n${lines}`;
 }
 
@@ -26,6 +24,19 @@ export interface BroadcastResult {
   total: number;
   sent: number;
   failed: number;
+}
+
+// Current hour (0–23) in config.timezone. Replaces TODO_bot's removed
+// quietHours.ts — the reminders cron now runs hourly and this decides who,
+// of everyone, is actually due a message this run.
+function currentHour(): number {
+  const hourStr = new Intl.DateTimeFormat('en-US', {
+    timeZone: config.timezone,
+    hour: 'numeric',
+    hour12: false,
+  }).format(new Date());
+  const hour = Number(hourStr);
+  return hour === 24 ? 0 : hour;
 }
 
 // Reminder composition and delivery, triggered by a Vercel Cron Job
@@ -68,11 +79,16 @@ export class RemindersService {
     }
   }
 
-  // Broadcast to every whitelisted user. A delivery failure for one user
-  // (e.g. they blocked the bot) is logged and counted in `failed`, and does
-  // not stop delivery to the rest.
+  // Broadcast to every whitelisted user whose personal reminderHour matches
+  // the current hour (this route is invoked hourly by Vercel Cron — see
+  // /vercel.json). A delivery failure for one user (e.g. they blocked the
+  // bot) is logged and counted in `failed`, and does not stop delivery to
+  // the rest.
   async sendToAll(): Promise<BroadcastResult> {
-    const users = await this.usersService.listAll();
+    const hour = currentHour();
+    const users = (await this.usersService.listAll()).filter(
+      (user) => user.reminderHour === hour,
+    );
 
     const results = await Promise.allSettled(
       users.map((user) => this.sendToUser(user)),
